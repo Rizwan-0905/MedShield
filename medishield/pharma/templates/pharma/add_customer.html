@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Customer</title>
+</head>
+<body>
+
+    <h3>Add New Customer</h3>
+
+    <form method="POST">
+        {% csrf_token %}
+        
+        <!-- Name input field -->
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" placeholder="Enter customer name" required><br><br>
+
+        <!-- Contact input field -->
+        <label for="contact">Contact:</label>
+        <input type="text" id="contact" name="contact" placeholder="Enter contact number" required><br><br>
+
+        <!-- Address input field -->
+        <label for="address">Address:</label>
+        <textarea id="address" name="address" placeholder="Enter customer address" required></textarea><br><br>
+
+        <!-- Submit button -->
+        <button type="submit">Add Customer</button>
+    </form>
+
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
+
+</body>
+</html>

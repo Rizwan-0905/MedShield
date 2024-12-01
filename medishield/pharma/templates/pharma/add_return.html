@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Return</title>
+</head>
+<body>
+
+    <h3>Return Product</h3>
+    
+    <form method="POST">
+        {% csrf_token %}
+        
+        <!-- Editable Inventory ID field -->
+        <label for="inventory_id">Inventory ID:</label>
+        <input type="text" id="inventory_id" name="inventory_id" placeholder="Enter Inventory ID" required>
+        <!-- Enter Button to fetch data -->
+        <button type="button" onclick="fetchInventoryData()">Enter</button><br><br>
+
+        <!-- Medicine Name (fixed, fetched from DB) -->
+        <label for="medicine_name">Medicine Name:</label>
+        <input type="text" id="medicine_name" value="{{ inventory.med.name }}" placeholder="Medicine Name" disabled><br><br>
+
+        <!-- Supplier Name (fixed, fetched from DB) -->
+        <label for="supplier">Supplier:</label>
+        <input type="text" id="supplier" value="{{ inventory.supplier.name }}" placeholder="Supplier" disabled><br><br>
+
+        <!-- Purchase Price (fixed, fetched from DB) -->
+        <label for="purchase_price">Purchase Price:</label>
+        <input type="text" id="purchase_price" value="{{ inventory.buy_price }}" placeholder="Purchase Price" disabled><br><br>
+
+        <!-- Quantity to Return (editable by user) -->
+        <label for="qty_returned">Quantity to Return:</label>
+        <input type="number" id="qty_returned" name="qty_returned" value="{{ inventory.quantity }}" min="1" max="{{ inventory.quantity }}" placeholder="Quantity" required><br><br>
+
+        <!-- Total Amount (fixed, calculated based on qty returned and purchase price) -->
+        <label for="total_amount">Total Amount:</label>
+        <input type="text" id="total_amount" value="{{ inventory.buy_price|floatformat:2 }}" placeholder="Total Amount" disabled><br><br>
+
+        <!-- Submit button to submit the return -->
+        <button type="submit">Submit Return</button>
+    </form>
+
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
+
+    <script>
+        // Function to fetch inventory data and update fields dynamically
+        function fetchInventoryData() {
+            let inventoryId = document.getElementById("inventory_id").value;
+            if (inventoryId) {
+                // Use AJAX to fetch inventory data by ID and update fields dynamically
+                // Example with alert, replace with AJAX call to your server to fetch data
+                alert('Fetching data for Inventory ID: ' + inventoryId);
+
+                // Assuming the response contains the data (replace with your server logic)
+                // Here's how you could set the fetched data in the fields:
+
+                // Example fetched data (replace with actual response values)
+                document.getElementById("medicine_name").value = "Aspirin";  // Example medicine
+                document.getElementById("supplier").value = "ABC Suppliers"; // Example supplier
+                document.getElementById("purchase_price").value = "20.00";   // Example purchase price
+                document.getElementById("qty_returned").value = "50";        // Example quantity
+                document.getElementById("total_amount").value = "1000.00";   // Example total amount
+                
+            } else {
+                alert('Please enter a valid inventory ID.');
+            }
+        }
+    </script>
+
+</body>
+</html>

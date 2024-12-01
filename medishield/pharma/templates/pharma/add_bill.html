@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bill Page</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">Bill Page</h1>
+
+        <form method="post" action="{% url 'add_bill' %}">
+            {% csrf_token %}
+
+            <!-- Customer Info Section -->
+            <div class="mb-3">
+                <label for="customerName" class="form-label">Customer Name</label>
+                <input type="text" class="form-control" id="customerName" name="customerName" placeholder="Enter Customer Name" required>
+            </div>
+            <div class="mb-3">
+                <label for="customerContact" class="form-label">Customer Contact</label>
+                <input type="text" class="form-control" id="customerContact" name="customerContact" placeholder="Enter Customer Contact" required>
+            </div>
+
+            <!-- Hidden Inputs for Total Quantity and Total Amount -->
+            <input type="hidden" id="hiddenTotalQty" name="totalQty" value="0">
+            <input type="hidden" id="hiddenTotalAmount" name="totalAmount" value="0.00">
+
+            <table class="table table-bordered table-hover" id="billTable">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Item ID</th>
+                        <th>Name</th>
+                        <th>Quantity</th>
+                        <th>Price</th>
+                        <th>Total</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for _ in "1" %}
+                    <tr>
+                        <td><input type="text" class="form-control" name="item_id[]" placeholder="Enter Item ID" oninput="fetchItemDetails(this)"></td>
+                        <td><input type="text" class="form-control" name="item_name[]" placeholder="Medicine Name" readonly></td>
+                        <td><input type="number" class="form-control" name="quantity[]" placeholder="Qty" min="1" oninput="updateTotals(this)" max="0"></td>
+                        <td><input type="number" class="form-control" name="price[]" placeholder="Price" min="0" readonly></td>
+                        <td><span class="total">0.00</span></td>
+                        <td><button type="button" class="btn btn-danger" onclick="removeRow(this)">Remove</button></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Add Row Button -->
+            <div class="mb-3">
+                <button type="button" class="btn btn-info" onclick="addRow()">Add Row</button>
+            </div>
+
+            <!-- Total Quantity and Amount Display -->
+            <div class="d-flex justify-content-between">
+                <div>
+                    <strong>Total Quantity:</strong> <span id="totalQty">0</span>
+                </div>
+                <div>
+                    <strong>Total Amount:</strong> <span id="totalAmount">0.00</span>
+                </div>
+            </div>
+
+            <!-- Submit Section -->
+            <div class="text-end mt-3">
+                <!-- OK Button to calculate totals -->
+                <button type="button" class="btn btn-primary" onclick="calculateGrandTotals()">OK</button>
+                <!-- Submit Button -->
+                <button type="submit" class="btn btn-success">Submit</button>
+            </div>
+        </form>
+
+        <!-- Display Inventory Data -->
+        <div class="mt-4">
+            <pre>{{ inventory|json_script:"inventory-data" }}</pre>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- JavaScript -->
+    <script>
+        const inventoryData = JSON.parse(document.getElementById('inventory-data').textContent);
+
+        function fetchItemDetails(input) {
+            const row = input.closest("tr");
+            const itemID = input.value;
+            const nameField = row.querySelector("input[name='item_name[]']");
+            const priceField = row.querySelector("input[name='price[]']");
+
+            const item = inventoryData.find(item => item.inventory_id == itemID);
+
+            if (item) {
+                nameField.value = item.name;
+                priceField.value = item.sell_price;
+                const qtyField = row.querySelector("input[name='quantity[]']");
+                qtyField.max = item.quantity;
+                updateTotals(input);
+            } else {
+                nameField.value = "";
+                priceField.value = "";
+                const qtyField = row.querySelector("input[name='quantity[]']");
+                qtyField.max = 0;
+            }
+        }
+
+        function updateTotals(input) {
+            const row = input.closest("tr");
+            const qty = parseFloat(row.querySelector("input[name='quantity[]']").value) || 0;
+            const price = parseFloat(row.querySelector("input[name='price[]']").value) || 0;
+            const total = row.querySelector(".total");
+
+            const maxQty = row.querySelector("input[name='quantity[]']").max;
+            if (qty > maxQty) {
+                alert("Quantity cannot exceed the available stock.");
+                row.querySelector("input[name='quantity[]']").value = maxQty;
+            }
+
+            total.textContent = (qty * price).toFixed(2);
+        }
+
+        function calculateGrandTotals() {
+            let totalQty = 0;
+            let totalAmount = 0;
+
+            document.querySelectorAll("#billTable tbody tr").forEach(row => {
+                const qty = parseFloat(row.querySelector("input[name='quantity[]']").value) || 0;
+                const total = parseFloat(row.querySelector(".total").textContent) || 0;
+
+                totalQty += qty;
+                totalAmount += total;
+            });
+
+            document.getElementById("totalQty").textContent = totalQty;
+            document.getElementById("totalAmount").textContent = totalAmount.toFixed(2);
+
+            document.getElementById("hiddenTotalQty").value = totalQty;
+            document.getElementById("hiddenTotalAmount").value = totalAmount.toFixed(2);
+        }
+
+        function addRow() {
+            const tableBody = document.querySelector("#billTable tbody");
+            const newRow = document.createElement("tr");
+
+            newRow.innerHTML = ` 
+                <td><input type="text" class="form-control" name="item_id[]" placeholder="Enter Item ID" oninput="fetchItemDetails(this)"></td>
+                <td><input type="text" class="form-control" name="item_name[]" placeholder="Medicine Name" readonly></td>
+                <td><input type="number" class="form-control" name="quantity[]" placeholder="Qty" min="1" oninput="updateTotals(this)" max="0"></td>
+                <td><input type="number" class="form-control" name="price[]" placeholder="Price" min="0" readonly></td>
+                <td><span class="total">0.00</span></td>
+                <td><button type="button" class="btn btn-danger" onclick="removeRow(this)">Remove</button></td>
+            `;
+
+            tableBody.appendChild(newRow);
+        }
+
+        function removeRow(button) {
+            const row = button.closest("tr");
+            row.remove();
+            calculateGrandTotals();
+        }
+    </script>
+</body>
+</html>
