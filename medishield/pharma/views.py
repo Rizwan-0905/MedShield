@@ -1,54 +1,156 @@
 # created by Rizwan
 from django.http import HttpResponse
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
+from django.contrib.auth import login,authenticate
 from django.contrib import messages
+import json
 from django.http import JsonResponse
-from .models import Customer,Inventory,Medicine,Supplier,Bill,BillInvoice
+from .models import Customer,Inventory,Medicine,Supplier,Bill,BillInvoice,Returns
 from django.db import connection,transaction
 from decimal import Decimal
-import datetime
+import datetime 
+from datetime import date
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.db import transaction, connection
 from .models import Customer, Bill, BillInvoice, Inventory, Salt
 from decimal import Decimal
-from datetime import datetime
-
-
-def home(request):
-    x=datetime.datetime.now()
-    params={'date':x}
-    return render(request,'pharma/home.html',params)
+from django.db import transaction, IntegrityError
 
 
 
 
-# Suppliers page view
-def suppliers(request):
+def user_login(request):
+    if request.method == "POST":
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        
+        # Authenticate user
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login( request,user)  # Log the user in
+            messages.success(request, "Welcome back, " + username + "!")
+            return redirect('home')  # Redirect to home or dashboard
+        else:
+            # Add error message for invalid credentials
+            messages.error(request, "Invalid username or password. Please try again.")
     
+    return render(request, 'pharma/login.html')
+from django.contrib.auth.decorators import login_required
+
+# Use the login_required decorator on each view that requires authentication
+
+@login_required
+def home(request):
+    x = datetime.datetime.now()
+    params = {'date': x}
+    return render(request, 'pharma/home.html', params)
+
+from django.shortcuts import render
+from .models import Bill, BillInvoice, Inventory, Medicine
+
+def individ_bill(request):
+    # Get the bill ID from the GET parameter
+    bill_id = request.GET.get('bill_id')
+    
+    # Retrieve the bill and related invoice data, including inventory details and associated medicines
+    bill = Bill.objects.get(bill_id=bill_id)
+    invoices = BillInvoice.objects.filter(bill_id=bill_id).select_related('inventory')
+    
+    # Prepare a list to hold the data including medicine name and total price for each item
+    invoices_with_total = []
+    for invoice in invoices:
+        medicine_name = invoice.inventory.med.name  # Access the related medicine name
+        total_price = invoice.quantity * invoice.inventory.sell_price  # Calculate total price
+        
+        invoices_with_total.append({
+            'invoice': invoice,
+            'medicine_name': medicine_name,
+            'total_price': total_price
+        })
+    
+    # Prepare the context
+    context = {
+        'bill': bill,
+        'invoices_with_total': invoices_with_total,
+    }
+    
+    return render(request, 'pharma/individ_bill.html', context)
+
+
+
+@login_required
+def suppliers(request):
     return render(request, 'pharma/suppliers.html')
 
-# Add new supplier view
+@login_required
 def new_supp(request):
     return render(request, 'pharma/new_supp.html')
 
+@login_required
 def add_return(request):
-    return render(request, 'pharma/add_return.html')
+    inv = Inventory.objects.all()
+    inv_data = [
+        {
+            'id': item.inventory_id,
+            'med': item.med.name,
+            'supplier': item.supplier.name,
+            'buy_price': float(item.buy_price),  # Convert Decimal to float
+            'quantity': item.quantity
+        } 
+        for item in inv
+    ]
+    
+    data = {
+        'inv_json': json.dumps(inv_data),  # Serialize data to JSON
+        'inv': inv
+    }
 
-# Bills page view
+    if request.method == 'POST':
+        inventory_id = request.POST.get('inventory_id')
+        qty_returned = request.POST.get('qty_returned')
+
+        try:
+            inventory = Inventory.objects.get(inventory_id=inventory_id)
+
+            # Validate quantity
+            if int(qty_returned) > inventory.quantity:
+                data['error'] = "Return quantity cannot exceed inventory quantity."
+            else:
+                # Process the return
+                inventory.quantity -= int(qty_returned)
+                inventory.save()
+                data['message'] = "Return processed successfully."
+                return redirect('inventory')
+        except Inventory.DoesNotExist:
+            data['error'] = "Invalid Inventory ID."
+
+    return render(request, 'pharma/add_return.html', data)
+
+def fetch_inventory(request):
+    """API endpoint to fetch inventory data by ID."""
+    inventory_id = request.GET.get('inventory_id')
+
+    try:
+        inventory = Inventory.objects.get(id=inventory_id)
+        response_data = {
+            'medicine_name': inventory.med.name,
+            'supplier': inventory.supplier.name,
+            'purchase_price': inventory.buy_price,
+            'quantity': inventory.quantity,
+        }
+        return JsonResponse(response_data)
+    except Inventory.DoesNotExist:
+        return JsonResponse({'error': 'Inventory not found.'}, status=404)
+
+@login_required
 def bill(request):
-    return render(request, 'pharma/bills.html')
+    bill = Bill.objects.raw("select * from all_bills")
+    params = {'data': bill}
+    return render(request, 'pharma/bills.html', params)
 
-# Add a new bill view
-from django.db import transaction, connection
-from datetime import datetime
-from decimal import Decimal
-
-from django.db import transaction
-from datetime import datetime
-from decimal import Decimal
-
-from django.db import transaction, IntegrityError
+@login_required
 def add_bill(request):
     # Fetch inventory using raw SQL query
     with connection.cursor() as cursor:
@@ -70,7 +172,7 @@ def add_bill(request):
             print(f"Customer: {customer.name}, Created: {created}")
 
             # Step 3: Retrieve medicines and quantities from the form data
-            inventory_ids = request.POST.getlist('inventory_id[]')
+            inventory_ids = request.POST.getlist('item_id[]')
             quantities = request.POST.getlist('quantity[]')
             total_amount = request.POST.get('totalAmount', 0.0)
 
@@ -89,7 +191,7 @@ def add_bill(request):
                     description_needed = True
 
             # Step 5: Create a Bill record
-            bill_date = datetime.today().date()
+            bill_date = date.today()
             bill = Bill.objects.create(
                 customer=customer,
                 total_amount=total_amount,
@@ -144,18 +246,18 @@ def add_bill(request):
     return render(request, 'pharma/add_bill.html', {'inventory': inventory})
 
 
-# Dead stock page view
+
+@login_required
 def dead_stock(request):
     return render(request, 'pharma/dead_stock.html')
 
-# Customers page view
+@login_required
 def customer(request):
-    #customs=Customer.objects.raw("select * from Customer")
-    customs=Customer.objects.all()
+    customs = Customer.objects.all()
     context = {'customers': customs}
-    return render(request, 'pharma/customers.html',context)
+    return render(request, 'pharma/customers.html', context)
 
-
+@login_required
 def add_customer(request):
     if request.method == 'POST':
         name = request.POST.get('name')
@@ -172,10 +274,9 @@ def add_customer(request):
         new_customer.save()
         return redirect('customer')
 
-
-
     return render(request, 'pharma/add_customer.html')
 
+@login_required
 def inventory(request):
     if request.method == "POST":
         # Process form data
@@ -188,7 +289,7 @@ def inventory(request):
             expiry_date = request.POST.get("expiry_date")
             buy_price = request.POST.get("buy_price")
             sell_price = request.POST.get("sell_price")
-            
+
             # Validate and save
             med = Medicine.objects.get(med_id=med_id)
             supplier = Supplier.objects.get(supplier_id=supplier_id)
@@ -214,23 +315,17 @@ def inventory(request):
             messages.error(request, "Invalid Supplier ID.")
         except Exception as e:
             messages.error(request, f"An error occurred: {str(e)}")
-    
+
     # Fetch inventory data for GET request
     inv = Inventory.objects.raw("SELECT * FROM all_inventory")
     context = {'data': inv}
     return render(request, "pharma/inventory.html", context)
 
+@login_required
 def add_inv(request):
-    
     return render(request, "pharma/add_inv.html")
 
-
-# Returns page view
+@login_required
 def returns(request):
-    return render(request, 'pharma/returns.html')
-
-# Complete returns page view
-def complete_returns(request):
-    return render(request, 'pharma/complete_returns.html')
-
-
+    dead_stock = Inventory.objects.raw("select * from dead_stock")
+    return render(request, 'pharma/returns.html', {'returns': dead_stock})
